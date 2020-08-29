@@ -8,6 +8,14 @@ I also deleted portions of the library that I didn't consider necessary for my o
 * all sanity checks and assertions that `bump.lua` would normally make e.g. `assertIsPositiveNumber` or `assertIsRect`. While these are useful for debugging and avoid weird inconsistent states, they eat up precious tokens. I've used `bump.lua` enough in other games to feel comfortable enough without these safeguards.
 * `bump.rect` and `bump.responses` tables. I honestly never used them anyway.
 
+## Tokens & Characters
+
+|  | Usage | Max | % |
+| --- | --- | --- | --- |
+| Tokens | 2646 | 8192 | 32.3% |
+| Characters (unminified) | 17390 | 65535 | 26.5% |
+| Characters (minified)   | 9366 | 65535 | 14.3% |
+
 ## Usage
 
 PICO-8 doesn't permit use of `require`, so this file can just be copied into your `p8` file.
