@@ -1,7 +1,7 @@
 local bump = {
-  _VERSION     = 'bump v3.1.7',
-  _URL         = 'https://github.com/kikito/bump.lua',
-  _DESCRIPTION = 'A collision detection library for Lua',
+  _VERSION     = 'bump v3.1.7-pico8',
+  _URL         = 'https://github.com/RuairiD/pico8-bump.lua',
+  _DESCRIPTION = 'A collision detection library for Lua, adapted for PICO-8',
   _LICENSE     = [[
     MIT LICENSE
 
@@ -31,9 +31,21 @@ local bump = {
 ------------------------------------------
 -- Auxiliary functions
 ------------------------------------------
-local DELTA = 1e-10 -- floating-point margin of error
+local huge = 32767 -- 16-bit max because PICO-8 uses 16 bit ints.
+local DELTA = 0.0000000001 -- floating-point margin of error
 
-local abs, floor, ceil, min, max = math.abs, math.floor, math.ceil, math.min, math.max
+local floor = flr
+
+local function sort(a, f)
+    for i=1,#a do
+        local j = i
+        while j > 1 and f(a[j-1], a[j]) do
+            a[j],a[j-1] = a[j-1],a[j]
+            j = j - 1
+        end
+    end
+end
+
 
 local function sign(x)
   if x > 0 then return 1 end
@@ -43,25 +55,6 @@ end
 
 local function nearest(x, a, b)
   if abs(a - x) < abs(b - x) then return a else return b end
-end
-
-local function assertType(desiredType, value, name)
-  if type(value) ~= desiredType then
-    error(name .. ' must be a ' .. desiredType .. ', but was ' .. tostring(value) .. '(a ' .. type(value) .. ')')
-  end
-end
-
-local function assertIsPositiveNumber(value, name)
-  if type(value) ~= 'number' or value <= 0 then
-    error(name .. ' must be a positive integer, but was ' .. tostring(value) .. '(' .. type(value) .. ')')
-  end
-end
-
-local function assertIsRect(x,y,w,h)
-  assertType('number', x, 'x')
-  assertType('number', y, 'y')
-  assertIsPositiveNumber(w, 'w')
-  assertIsPositiveNumber(h, 'h')
 end
 
 local defaultFilter = function()
@@ -152,8 +145,7 @@ local function rect_detectCollision(x1,y1,w1,h1, x2,y2,w2,h2, goalX, goalY)
     ti              = -wi * hi -- ti is the negative area of intersection
     overlaps = true
   else
-    local ti1,ti2,nx1,ny1 = rect_getSegmentIntersectionIndices(x,y,w,h, 0,0,dx,dy, -math.huge, math.huge)
-
+    local ti1,ti2,nx1,ny1 = rect_getSegmentIntersectionIndices(x,y,w,h, 0,0,dx,dy, -1 * huge, huge)
     -- item tunnels into other
     if ti1
     and ti1 < 1
@@ -180,7 +172,7 @@ local function rect_detectCollision(x1,y1,w1,h1, x2,y2,w2,h2, goalX, goalY)
     else
       -- intersecting and moving - move in the opposite direction
       local ti1, _
-      ti1,_,nx,ny = rect_getSegmentIntersectionIndices(x,y,w,h, 0,0,dx,dy, -math.huge, 1)
+      ti1,_,nx,ny = rect_getSegmentIntersectionIndices(x,y,w,h, 0,0,dx,dy, -1 * huge, 1)
       if not ti1 then return end
       tx, ty = x1 + dx * ti1, y1 + dy * ti1
     end
@@ -223,7 +215,7 @@ local function grid_traverse_initStep(cellSize, ct, t1, t2)
   elseif v < 0 then
     return -1, -cellSize / v, ((ct + v - 1) * cellSize - t1) / v
   else
-    return 0, math.huge, math.huge
+    return 0, huge, huge
   end
 end
 
@@ -266,10 +258,6 @@ end
 -- Responses
 ------------------------------------------
 
-local touch = function(world, col, x,y,w,h, goalX, goalY, filter)
-  return col.touch.x, col.touch.y, {}, 0
-end
-
 local cross = function(world, col, x,y,w,h, goalX, goalY, filter)
   local cols, len = world:project(col.item, x,y,w,h, goalX, goalY, filter)
   return goalX, goalY, cols, len
@@ -292,29 +280,6 @@ local slide = function(world, col, x,y,w,h, goalX, goalY, filter)
 
   x,y = tch.x, tch.y
   local cols, len  = world:project(col.item, x,y,w,h, goalX, goalY, filter)
-  return goalX, goalY, cols, len
-end
-
-local bounce = function(world, col, x,y,w,h, goalX, goalY, filter)
-  goalX = goalX or x
-  goalY = goalY or y
-
-  local tch, move = col.touch, col.move
-  local tx, ty = tch.x, tch.y
-
-  local bx, by = tx, ty
-
-  if move.x ~= 0 or move.y ~= 0 then
-    local bnx, bny = goalX - tx, goalY - ty
-    if col.normal.x == 0 then bny = -bny else bnx = -bnx end
-    bx, by = tx + bnx, ty + bny
-  end
-
-  col.bounce   = {x = bx,  y = by}
-  x,y          = tch.x, tch.y
-  goalX, goalY = bx, by
-
-  local cols, len    = world:project(col.item, x,y,w,h, goalX, goalY, filter)
   return goalX, goalY, cols, len
 end
 
@@ -383,52 +348,6 @@ local function getDictItemsInCellRect(self, cl,ct,cw,ch)
   return items_dict
 end
 
-local function getCellsTouchedBySegment(self, x1,y1,x2,y2)
-
-  local cells, cellsLen, visited = {}, 0, {}
-
-  grid_traverse(self.cellSize, x1,y1,x2,y2, function(cx, cy)
-    local row  = self.rows[cy]
-    if not row then return end
-    local cell = row[cx]
-    if not cell or visited[cell] then return end
-
-    visited[cell] = true
-    cellsLen = cellsLen + 1
-    cells[cellsLen] = cell
-  end)
-
-  return cells, cellsLen
-end
-
-local function getInfoAboutItemsTouchedBySegment(self, x1,y1, x2,y2, filter)
-  local cells, len = getCellsTouchedBySegment(self, x1,y1,x2,y2)
-  local cell, rect, l,t,w,h, ti1,ti2, tii0,tii1
-  local visited, itemInfo, itemInfoLen = {},{},0
-  for i=1,len do
-    cell = cells[i]
-    for item in pairs(cell.items) do
-      if not visited[item] then
-        visited[item]  = true
-        if (not filter or filter(item)) then
-          rect           = self.rects[item]
-          l,t,w,h        = rect.x,rect.y,rect.w,rect.h
-
-          ti1,ti2 = rect_getSegmentIntersectionIndices(l,t,w,h, x1,y1, x2,y2, 0, 1)
-          if ti1 and ((0 < ti1 and ti1 < 1) or (0 < ti2 and ti2 < 1)) then
-            -- the sorting is according to the t of an infinite line, not the segment
-            tii0,tii1    = rect_getSegmentIntersectionIndices(l,t,w,h, x1,y1, x2,y2, -math.huge, math.huge)
-            itemInfoLen  = itemInfoLen + 1
-            itemInfo[itemInfoLen] = {item = item, ti1 = ti1, ti2 = ti2, weight = min(tii0,tii1)}
-          end
-        end
-      end
-    end
-  end
-  table.sort(itemInfo, sortByWeight)
-  return itemInfo, itemInfoLen
-end
-
 local function getResponseByName(self, name)
   local response = self.responses[name]
   if not response then
@@ -445,8 +364,6 @@ function World:addResponse(name, response)
 end
 
 function World:project(item, x,y,w,h, goalX, goalY, filter)
-  assertIsRect(x,y,w,h)
-
   goalX = goalX or x
   goalY = goalY or y
   filter  = filter  or defaultFilter
@@ -487,7 +404,7 @@ function World:project(item, x,y,w,h, goalX, goalY, filter)
     end
   end
 
-  table.sort(collisions, sortByTiAndDistance)
+  sort(collisions, sortByTiAndDistance)
 
   return collisions, len
 end
@@ -541,9 +458,6 @@ end
 --- Query methods
 
 function World:queryRect(x,y,w,h, filter)
-
-  assertIsRect(x,y,w,h)
-
   local cl,ct,cw,ch = grid_toCellRect(self.cellSize, x,y,w,h)
   local dictItemsInCellRect = getDictItemsInCellRect(self, cl,ct,cw,ch)
 
@@ -583,33 +497,6 @@ function World:queryPoint(x,y, filter)
   return items, len
 end
 
-function World:querySegment(x1, y1, x2, y2, filter)
-  local itemInfo, len = getInfoAboutItemsTouchedBySegment(self, x1, y1, x2, y2, filter)
-  local items = {}
-  for i=1, len do
-    items[i] = itemInfo[i].item
-  end
-  return items, len
-end
-
-function World:querySegmentWithCoords(x1, y1, x2, y2, filter)
-  local itemInfo, len = getInfoAboutItemsTouchedBySegment(self, x1, y1, x2, y2, filter)
-  local dx, dy        = x2-x1, y2-y1
-  local info, ti1, ti2
-  for i=1, len do
-    info  = itemInfo[i]
-    ti1   = info.ti1
-    ti2   = info.ti2
-
-    info.weight  = nil
-    info.x1      = x1 + dx * ti1
-    info.y1      = y1 + dy * ti1
-    info.x2      = x1 + dx * ti2
-    info.y2      = y1 + dy * ti2
-  end
-  return itemInfo, len
-end
-
 
 --- Main methods
 
@@ -618,7 +505,6 @@ function World:add(item, x,y,w,h)
   if rect then
     error('Item ' .. tostring(item) .. ' added to the world twice.')
   end
-  assertIsRect(x,y,w,h)
 
   self.rects[item] = {x=x,y=y,w=w,h=h}
 
@@ -647,7 +533,6 @@ end
 function World:update(item, x2,y2,w2,h2)
   local x1,y1,w1,h1 = self:getRect(item)
   w2,h2 = w2 or w1, h2 or h1
-  assertIsRect(x2,y2,w2,h2)
 
   if x1 ~= x2 or y1 ~= y2 or w1 ~= w2 or h1 ~= h2 then
 
@@ -736,7 +621,6 @@ end
 
 bump.newWorld = function(cellSize)
   cellSize = cellSize or 64
-  assertIsPositiveNumber(cellSize, 'cellSize')
   local world = setmetatable({
     cellSize       = cellSize,
     rects          = {},
@@ -752,22 +636,3 @@ bump.newWorld = function(cellSize)
 
   return world
 end
-
-bump.rect = {
-  getNearestCorner              = rect_getNearestCorner,
-  getSegmentIntersectionIndices = rect_getSegmentIntersectionIndices,
-  getDiff                       = rect_getDiff,
-  containsPoint                 = rect_containsPoint,
-  isIntersecting                = rect_isIntersecting,
-  getSquareDistance             = rect_getSquareDistance,
-  detectCollision               = rect_detectCollision
-}
-
-bump.responses = {
-  touch  = touch,
-  cross  = cross,
-  slide  = slide,
-  bounce = bounce
-}
-
-return bump

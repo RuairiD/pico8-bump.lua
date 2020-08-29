@@ -1,3 +1,21 @@
+# pico8-bump.lua
+
+This is a fork of kikito's *excellent* [bump.lua](https://github.com/kikito/bump.lua) 2D-physics library, adapted to work in PICO-8 games. PICO-8 has no access to the `math` lua module and uses [16-bit ints](https://pico-8.fandom.com/wiki/Math), so all `math.floor` etc. calls were replaced with their PICO-8 equivalents. `math.huge` did not have a standard PICO-8 analog, so the 16 bit int max (32767) was hardcoded instead. Likewise, PICO-8 lua does not parse `10e-10` style numbers, so `DELTA` was changed to a regular decimal value. PICO-8 also does not have access to the `table` module, so a separate sort function was added to replace `table.sort`.
+
+I also deleted portions of the library that I didn't consider necessary for my own uses to save on tokens and characters:
+* `bounce` and `touch` collision types
+* anything involving querying segments (note: querying rects and points are unchanged)
+* all sanity checks and assertions that `bump.lua` would normally make e.g. `assertIsPositiveNumber` or `assertIsRect`. While these are useful for debugging and avoid weird inconsistent states, they eat up precious tokens. I've used `bump.lua` enough in other games to feel comfortable enough without these safeguards.
+* `bump.rect` and `bump.responses` tables. I honestly never used them anyway.
+
+## Usage
+
+PICO-8 doesn't permit use of `require`, so this file can just be copied into your `p8` file.
+
+---
+
+The upstream README is below:
+
 # bump.lua
 
 [![Build Status](https://travis-ci.org/kikito/bump.lua.svg?branch=master)](https://travis-ci.org/kikito/bump.lua)
